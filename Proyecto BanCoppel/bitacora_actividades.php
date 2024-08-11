@@ -2,13 +2,34 @@
 session_start();
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
-    exit;
+    exit();
 }
 
 include 'conexion.php';
 
-// Obtener actividades de la base de datos
-$stmt = $pdo->prepare("SELECT actividades.*, TO_CHAR(actividades.hora_inicio, 'HH24:MI:SS') as hora_inicio_formateada, TO_CHAR(actividades.hora_fin, 'HH24:MI:SS') as hora_fin_formateada, usuarios.nombre as usuario_nombre FROM actividades LEFT JOIN usuarios ON actividades.numero_empleado = usuarios.numero_empleado ORDER BY CASE WHEN estado = 'completado' THEN 1 ELSE 2 END, fecha DESC");
+// Establecer la zona horaria de Mazatlán, Culiacán, Sinaloa
+date_default_timezone_set('America/Mazatlan');
+
+// Obtener la hora actual
+$horaActual = date('H:i:s'); // Formato de 24 horas
+
+// Determinar la fecha basada en la hora actual
+if ($horaActual >= '00:00:00' && $horaActual < '12:00:00') {
+    $fecha = date('Y-m-d');
+} else {
+    $fecha = date('Y-m-d', strtotime('+1 day'));
+}
+
+// Verificar la hora y fecha
+echo "Hora actual: " . $horaActual . "<br>";
+echo "Fecha utilizada: " . $fecha . "<br>";
+
+// Registrar la hora y fecha en un archivo de log
+//file_put_contents('fecha_log.txt', "Hora actual: $horaActual - Fecha utilizada: $fecha\n", FILE_APPEND);
+
+// Resto del código para manejar la bitácora de actividades
+$stmt = $pdo->prepare("SELECT actividades.*, TO_CHAR(actividades.hora_inicio, 'HH24:MI:SS') as hora_inicio_formateada, TO_CHAR(actividades.hora_fin, 'HH24:MI:SS') as hora_fin_formateada, usuarios.nombre as usuario_nombre FROM actividades LEFT JOIN usuarios ON actividades.numero_empleado = usuarios.numero_empleado WHERE fecha = :fecha ORDER BY CASE WHEN estado = 'completado' THEN 1 WHEN estado = 'activo' THEN 2 ELSE 3 END");
+$stmt->bindParam(':fecha', $fecha);
 $stmt->execute();
 $actividades = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -72,7 +93,7 @@ if (!$actividades) {
         }
 
         nav ul li {
-            margin: 0 15px;
+            margin: 0px 30%;
         }
 
         nav ul li a {
@@ -117,9 +138,19 @@ if (!$actividades) {
             word-wrap: break-word;
         }
 
-        .completed td.estado {
+        .estado-completado {
             background-color: #c3e6cb;
-            color: #155724;
+            font-weight: bold;
+        }
+
+        .estado-activo {
+            background-color: yellow;
+            font-weight: bold;
+        }
+
+        .estado-pendiente {
+            background-color: lightcoral;
+            font-weight: bold;
         }
 
         .actions i {
@@ -182,21 +213,38 @@ if (!$actividades) {
             background-color: #0056b3;
         }
 
-        .estado-completado {
-            background-color: #c3e6cb;
-            font-weight: bold;
-        }
-
-        .estado-pendiente {
-            background-color: lightcoral;
-            font-weight: bold;
-        }
-
         footer {
             text-align: center;
             padding: 10px;
             background-color: #0056b3;
             color: #fff;
+        }
+
+        .filter-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .filter-container input {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .filter-container button {
+            padding: 10px 20px;
+            border: none;
+            background-color: #007bff;
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease-in-out;
+        }
+
+        .filter-container button:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
@@ -206,18 +254,23 @@ if (!$actividades) {
             <img src="imagenes/coppel-logo2.png" alt="BanCoppel">
             <nav>
                 <ul>
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="bitacora_actividades.php">Bitácora de Actividades</a></li>
-                    <li><a href="reporte.php">Reportes</a></li>
-                    <li><a href="incidencias.php">Incidencias</a></li>
-                    <li><a href="login.php">Iniciar Sesión</a></li>
-                    <li><a href="registro.php">Registrarse</a></li>
+                    <li><a href="logout.php">Cerrar Sesion</a></li>
                 </ul>
             </nav>
         </div>
     </header>
     <div class="container">
         <h1>Bitácora de Actividades</h1>
+        <div class="filter-container">
+            <div>
+                <input type="date" id="filterFecha" value="<?php echo date('Y-m-d'); ?>">
+                <button onclick="filterActivities()">Buscar</button>
+            </div>
+            <div>
+                <button onclick="openCopyModal()">Copiar Actividades</button>
+                <button onclick="deleteActivitiesByDate()">Eliminar Actividades del Día</button>
+            </div>
+        </div>
         <div class="actions-container">
             <i class="fa fa-plus" onclick="openAddModal()"></i>
         </div>
@@ -232,20 +285,21 @@ if (!$actividades) {
                         <th>Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="activitiesTable">
                     <?php foreach ($actividades as $actividad): ?>
                         <tr>
                             <td><?php echo htmlspecialchars($actividad['titulo']); ?></td>
                             <td><?php echo htmlspecialchars($actividad['descripcion']); ?></td>
                             <td><?php echo htmlspecialchars($actividad['usuario_nombre']); ?></td>
-                            <td class="<?php echo $actividad['estado'] == 'completado' ? 'estado-completado' : 'estado-pendiente'; ?>">
+                            <td class="<?php echo 'estado-' . strtolower($actividad['estado']); ?>">
                                 <?php echo htmlspecialchars($actividad['estado']); ?>
                             </td>
                             <td class="actions">
-                                <i class="fa fa-edit" onclick="openEditModal('<?php echo htmlspecialchars(json_encode($actividad)); ?>')"></i>
+                                <i class="fa fa-edit" onclick='openEditModal(<?php echo json_encode($actividad); ?>)'></i>
                                 <i class="fa fa-trash" onclick="openDeleteModal(<?php echo $actividad['id']; ?>)"></i>
-                                <i class="fa fa-play" onclick="startActivity(<?php echo $actividad['id']; ?>)"></i>
-                                <i class="fa fa-stop" onclick="stopActivity(<?php echo $actividad['id']; ?>)"></i>
+                                <i class="fa fa-play" onclick="startActivity(<?php echo $actividad['id']; ?>, '<?php echo date('Y-m-d'); ?>')"></i>
+                                <i class="fa fa-stop" onclick="stopActivity(<?php echo $actividad['id']; ?>, '<?php echo date('Y-m-d'); ?>')"></i>
+                                <i class="fa fa-exchange-alt" onclick='openTransferModal(<?php echo json_encode($actividad); ?>)'></i>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -266,6 +320,7 @@ if (!$actividades) {
                 <textarea id="addDescripcion" placeholder="Descripción" required></textarea>
                 <select id="addEstado" required>
                     <option value="pendiente">Pendiente</option>
+                    <option value="activo">Activo</option>
                     <option value="completado">Completado</option>
                 </select>
                 <button type="submit">Agregar</button>
@@ -284,6 +339,7 @@ if (!$actividades) {
                 <textarea id="editDescripcion" placeholder="Descripción" required></textarea>
                 <select id="editEstado" required>
                     <option value="pendiente">Pendiente</option>
+                    <option value="activo">Activo</option>
                     <option value="completado">Completado</option>
                 </select>
                 <button type="submit">Guardar Cambios</button>
@@ -302,59 +358,196 @@ if (!$actividades) {
         </div>
     </div>
 
+<!-- Modal para transferir actividad -->
+<div class="modal" id="transferModal">
+    <div class="modal-content">
+        <h2>Transferir Actividad</h2>
+        <form id="transferForm">
+            <input type="hidden" id="transferActividadId">
+            <label for="nuevoUsuario">Selecciona el nuevo usuario:</label>
+            <select id="nuevoUsuario" required>
+                <?php foreach ($usuarios as $usuario): ?>
+                    <option value="<?php echo $usuario['numero_empleado']; ?>">
+                        <?php echo htmlspecialchars($usuario['nombre']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit">Transferir</button>
+            <button type="button" onclick="closeTransferModal()">Cancelar</button>
+        </form>
+    </div>
+</div>
+
+
+    <!-- Modal para copiar actividad -->
+    <div class="modal" id="copyModal">
+        <div class="modal-content">
+            <h2>Copiar Actividades</h2>
+            <form id="copyForm">
+                <label for="copyFromDate">Selecciona la fecha de origen:</label>
+                <input type="date" id="copyFromDate" required>
+                <label for="copyToDate">Selecciona la fecha de destino:</label>
+                <input type="date" id="copyToDate" required>
+                <button type="submit">Realizar Copiado</button>
+                <button type="button" onclick="closeCopyModal()">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
     <script>
-        function openAddModal() {
-            document.getElementById('addModal').style.display = 'flex';
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('filterFecha').value = today;
+            filterActivities();
+        });
+
+        function filterActivities() {
+            const fecha = document.getElementById('filterFecha').value;
+            if (fecha) {
+                fetch(`filtrar_actividades.php?fecha=${fecha}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const tbody = document.getElementById('activitiesTable');
+                        tbody.innerHTML = '';
+                        data.actividades.forEach(actividad => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${actividad.titulo}</td>
+                                <td>${actividad.descripcion}</td>
+                                <td>${actividad.usuario_nombre}</td>
+                                <td class="estado-${actividad.estado.toLowerCase()}">${actividad.estado}</td>
+                                <td class="actions">
+                                    <i class="fa fa-edit" onclick='openEditModal(${JSON.stringify(actividad)})'></i>
+                                    <i class="fa fa-trash" onclick="openDeleteModal(${actividad.id})"></i>
+                                    <i class="fa fa-play" onclick="startActivity(${actividad.id}, '${fecha}')"></i>
+                                    <i class="fa fa-stop" onclick="stopActivity(${actividad.id}, '${fecha}')"></i>
+                                    <i class="fa fa-exchange-alt" onclick='openTransferModal(${JSON.stringify(actividad)})'></i>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    });
+            }
         }
 
-        function closeAddModal() {
-            document.getElementById('addModal').style.display = 'none';
+        function startActivity(id, fecha) {
+            fetch('start_activity.php?id=' + id)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Actividad iniciada.');
+                        filterActivitiesByDate(fecha);
+                    } else {
+                        alert('Error al iniciar la actividad.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al iniciar la actividad.');
+                });
         }
 
-        function openEditModal(actividad) {
-            actividad = JSON.parse(actividad);
-            document.getElementById('editId').value = actividad.id;
-            document.getElementById('editTitulo').value = actividad.titulo;
-            document.getElementById('editDescripcion').value = actividad.descripcion;
-            document.getElementById('editEstado').value = actividad.estado;
-            document.getElementById('editModal').style.display = 'flex';
+        function stopActivity(id, fecha) {
+            fetch('stop_activity.php?id=' + id)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Actividad detenida.');
+                        filterActivitiesByDate(fecha);
+                    } else {
+                        alert('Error al detener la actividad.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al detener la actividad.');
+                });
         }
 
-        function closeEditModal() {
-            document.getElementById('editModal').style.display = 'none';
+        function filterActivitiesByDate(fecha) {
+            fetch(`filtrar_actividades.php?fecha=${fecha}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('activitiesTable');
+                    tbody.innerHTML = '';
+                    data.actividades.forEach(actividad => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${actividad.titulo}</td>
+                            <td>${actividad.descripcion}</td>
+                            <td>${actividad.usuario_nombre}</td>
+                            <td class="estado-${actividad.estado.toLowerCase()}">${actividad.estado}</td>
+                            <td class="actions">
+                                <i class="fa fa-edit" onclick='openEditModal(${JSON.stringify(actividad)})'></i>
+                                <i class="fa fa-trash" onclick="openDeleteModal(${actividad.id})"></i>
+                                <i class="fa fa-play" onclick="startActivity(${actividad.id}, '${fecha}')"></i>
+                                <i class="fa fa-stop" onclick="stopActivity(${actividad.id}, '${fecha}')"></i>
+                                <i class="fa fa-exchange-alt" onclick='openTransferModal(${JSON.stringify(actividad)})'></i>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                });
         }
 
-        function openDeleteModal(id) {
-            document.getElementById('confirmDeleteBtn').setAttribute('data-id', id);
-            document.getElementById('deleteModal').style.display = 'flex';
-        }
-
-        function closeDeleteModal() {
-            document.getElementById('deleteModal').style.display = 'none';
-        }
-
-        document.getElementById('addForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const titulo = document.getElementById('addTitulo').value;
-            const descripcion = document.getElementById('addDescripcion').value;
-            const estado = document.getElementById('addEstado').value;
-
-            fetch('agregar_actividad.php', {
+        function deleteActivitiesByDate() {
+    const fecha = document.getElementById('filterFecha').value;
+    if (fecha) {
+        if (confirm('¿Estás seguro de que deseas eliminar todas las actividades del ' + fecha + '?')) {
+            fetch('eliminar_actividades_por_fecha.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ titulo, descripcion, estado })
+                body: JSON.stringify({ fecha: fecha })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    alert('Actividades eliminadas exitosamente.');
+                    filterActivities(); // Refrescar la tabla
                 } else {
-                    alert('Error al agregar la actividad.');
+                    alert('Error al eliminar las actividades: ' + data.message);
                 }
+            })
+            .catch(error => {
+                alert('Error al eliminar las actividades.');
+                console.error('Error:', error);
             });
-        });
+        }
+    } else {
+        alert('Por favor selecciona una fecha.');
+    }
+}
+document.getElementById('transferForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const actividad_id = document.getElementById('transferActividadId').value;
+    const nuevo_user_id = document.getElementById('nuevoUsuario').value;
+
+    console.log('Datos enviados:', { actividad_id, nuevo_user_id });
+
+    fetch('transferir_actividad.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ actividad_id, nuevo_user_id })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Transferencia exitosa:', data);
+            location.reload();
+        } else {
+            console.log('Error en la transferencia:', data.message);
+            alert('Error al transferir la actividad: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al realizar la solicitud.');
+    });
+});
 
         document.getElementById('editForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -393,38 +586,93 @@ if (!$actividades) {
                 });
         });
 
-        function startActivity(id) {
-            fetch('start_activity.php?id=' + id)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Actividad iniciada.');
-                        location.reload(); // Recargar la página para ver los cambios
-                    } else {
-                        alert('Error al iniciar la actividad.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error al iniciar la actividad.');
-                });
+        document.getElementById('copyForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const fromDate = document.getElementById('copyFromDate').value;
+            const toDate = document.getElementById('copyToDate').value;
+
+            fetch('copiar_actividades.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fromDate, toDate })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Actividades copiadas exitosamente.');
+                    location.reload();
+                } else {
+                    alert('Error al copiar las actividades: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error al copiar las actividades.');
+                console.error('Error:', error);
+            });
+        });
+
+        function openAddModal() {
+            document.getElementById('addModal').style.display = 'flex';
         }
 
-        function stopActivity(id) {
-            fetch('stop_activity.php?id=' + id)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Actividad detenida.');
-                        location.reload(); // Recargar la página para ver los cambios
-                    } else {
-                        alert('Error al detener la actividad.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error al detener la actividad.');
-                });
+        function closeAddModal() {
+            document.getElementById('addModal').style.display = 'none';
+        }
+
+        function openEditModal(actividad) {
+            document.getElementById('editId').value = actividad.id;
+            document.getElementById('editTitulo').value = actividad.titulo;
+            document.getElementById('editDescripcion').value = actividad.descripcion;
+            document.getElementById('editEstado').value = actividad.estado;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function openDeleteModal(id) {
+            document.getElementById('confirmDeleteBtn').setAttribute('data-id', id);
+            document.getElementById('deleteModal').style.display = 'flex';
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+        }
+
+        function openTransferModal(actividad) {
+    fetch('obtener_usuarios.php') // Archivo PHP que devuelve la lista de usuarios
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('nuevoUsuario');
+            select.innerHTML = ''; // Limpia las opciones previas
+            data.usuarios.forEach(usuario => {
+                const option = document.createElement('option');
+                option.value = usuario.numero_empleado;
+                option.textContent = usuario.nombre;
+                select.appendChild(option);
+            });
+            document.getElementById('transferActividadId').value = actividad.id;
+            document.getElementById('transferModal').style.display = 'flex';
+        })
+        .catch(error => {
+            console.error('Error al obtener los usuarios:', error);
+            alert('No se pudo cargar la lista de usuarios.');
+        });
+}
+
+        function closeTransferModal() {
+            document.getElementById('transferModal').style.display = 'none';
+        }
+
+        function openCopyModal() {
+            document.getElementById('copyModal').style.display = 'flex';
+        }
+
+        function closeCopyModal() {
+            document.getElementById('copyModal').style.display = 'none';
         }
     </script>
 </body>

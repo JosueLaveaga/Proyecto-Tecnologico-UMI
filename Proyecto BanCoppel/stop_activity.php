@@ -1,22 +1,16 @@
 <?php
-session_start();
 include 'conexion.php';
 
-date_default_timezone_set('America/Mazatlan'); // Ajusta esto a tu zona horaria
+$id = $_GET['id'];
+$fecha = date('Y-m-d H:i:s');
 
-if (isset($_GET['id'])) {
-    $id = $_GET['id'];
-    $hora_fin = date('Y-m-d H:i:s'); // Obtener la fecha y hora local en formato Y-m-d H:i:s
-
-    $stmt = $pdo->prepare("UPDATE actividades SET hora_fin = ? WHERE id = ?");
-    $stmt->execute([$hora_fin, $id]);
-
-    if ($stmt->rowCount() > 0) {
-        echo json_encode(['success' => true]);
-    } else {
-        echo json_encode(['success' => false]);
-    }
-    exit;
+try {
+    $stmt = $pdo->prepare("UPDATE actividades SET estado = 'completado', hora_fin = :hora_fin WHERE id = :id");
+    $stmt->bindParam(':hora_fin', $fecha);
+    $stmt->bindParam(':id', $id);
+    $stmt->execute();
+    echo json_encode(['success' => true]);
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
-echo json_encode(['success' => false]);
 ?>

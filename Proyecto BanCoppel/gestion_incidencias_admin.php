@@ -4,15 +4,22 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
     echo "Acceso denegado.";
     exit;
 }
-?>
 
+require 'conexion.php';
+
+// Obtener las incidencias pendientes y en proceso
+$query = $pdo->prepare("SELECT i.*, u.nombre AS nombre_colaborador FROM incidencias i JOIN usuarios u ON i.numero_empleado = u.numero_empleado WHERE i.estado IN ('pendiente', 'en_proceso') ORDER BY i.estado, i.fecha DESC");
+$query->execute();
+$incidencias = $query->fetchAll(PDO::FETCH_ASSOC);
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Administrador</title>
+    <title>Gestión de Incidencias</title>
     <style>
+        /* CSS personalizado */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -21,7 +28,6 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             flex-direction: column;
             min-height: 100vh;
             background-color: #f4f4f4;
-            overflow: hidden;
         }
         header {
             background-color: #0056b3;
@@ -116,17 +122,30 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
         .admin-panel h1 {
             margin-bottom: 20px;
         }
-        .admin-panel a {
-            display: inline-block;
-            margin: 10px;
+        .admin-panel .incidencia {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            text-align: left;
+        }
+        .admin-panel .incidencia img {
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+        }
+        .boton-accion {
+            margin-top: 10px;
             padding: 10px 20px;
             background-color: #007bff;
             color: #fff;
-            text-decoration: none;
+            border: none;
             border-radius: 5px;
+            cursor: pointer;
             transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
         }
-        .admin-panel a:hover {
+        .boton-accion:hover {
             background-color: #0056b3;
             box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
         }
@@ -196,9 +215,8 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             <ul>
                 <li><a href="index.php" onclick="toggleMenu()">Inicio</a></li>
                 <li><a href="bitacora_actividades.php" onclick="toggleMenu()">Bitácora de Actividades</a></li>
-                <li><a href="reporte_actividades_admin.php" onclick="toggleMenu()">Reporte de Actividades</a></li>
-                <li><a href="reporte_incidencias_admin.php" onclick="toggleMenu()">Reporte de Incidencias</a></li>
-                <li><a href="gestion_incidencias_admin.php" onclick="toggleMenu()">Gestión de Incidencias</a></li>
+                <li><a href="reporte.php" onclick="toggleMenu()">Reportes</a></li>
+                <li><a href="gestion_incidencias_admin.php" onclick="toggleMenu()">Incidencias</a></li>
                 <li><a href="logout.php" onclick="toggleMenu()">Cerrar Sesión</a></li>
             </ul>
         </div>
@@ -206,12 +224,25 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
     <div class="background" id="background"></div>
     <div class="container">
         <div class="admin-panel">
-            <h1>Bienvenido al Panel de Administrador</h1>
-            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
-            <a href="bitacora_actividades.php">Bitácora de Actividades</a>
-            <a href="gestion_incidencias_admin.php">Gestión de Incidencias</a>
-            <a href="reporte_actividades_admin.php">Reporte de Actividades</a>
-            <a href="reporte_incidencias_admin.php">Reporte de Incidencias</a>
+            <h1>Gestión de Incidencias</h1>
+            <?php if (count($incidencias) > 0): ?>
+                <?php foreach ($incidencias as $incidencia): ?>
+                    <div class="incidencia">
+                        <p><strong>Fecha:</strong> <?php echo htmlspecialchars($incidencia['fecha']); ?></p>
+                        <p><strong>Hora de Última Actualización:</strong> <?php echo htmlspecialchars($incidencia['hora_actualizacion'] ?? ''); ?></p>
+                        <p><strong>Descripción:</strong> <?php echo htmlspecialchars($incidencia['descripcion']); ?></p>
+                        <p><strong>Prioridad:</strong> <?php echo htmlspecialchars($incidencia['prioridad']); ?></p>
+                        <p><strong>Colaborador:</strong> <?php echo htmlspecialchars($incidencia['nombre_colaborador']); ?></p>
+                        <?php if (!empty($incidencia['imagen_nombre'])): ?>
+                            <button class="boton-accion" onclick="window.location.href='descargar_imagen.php?nombre=<?php echo htmlspecialchars($incidencia['imagen_nombre']); ?>&id=<?php echo $incidencia['id']; ?>'">Descargar Imagen</button>
+                        <?php endif; ?>
+                        <button class="boton-accion" onclick="marcarEnProceso(<?php echo $incidencia['id']; ?>)">Marcar como En Proceso</button>
+                        <button class="boton-accion" onclick="marcarResuelta(<?php echo $incidencia['id']; ?>)">Marcar como Resuelta</button>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <p>No hay incidencias pendientes o en proceso.</p>
+            <?php endif; ?>
         </div>
     </div>
     <footer>
@@ -242,6 +273,31 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
         // Crear múltiples partículas al cargar la página
         for (let i = 0; i < 100; i++) {
             setTimeout(createParticle, i * 100);
+        }
+
+        // Funciones para marcar incidencia
+        function marcarEnProceso(id) {
+            fetch('marcar_incidencia.php?id=' + id + '&estado=en_proceso')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error al marcar la incidencia como en proceso');
+                    }
+                });
+        }
+
+        function marcarResuelta(id) {
+            fetch('marcar_incidencia.php?id=' + id + '&estado=resuelta')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error al marcar la incidencia como resuelta');
+                    }
+                });
         }
     </script>
 </body>

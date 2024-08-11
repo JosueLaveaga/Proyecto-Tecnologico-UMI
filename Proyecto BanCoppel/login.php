@@ -13,11 +13,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($usuario && $usuario['password'] === $password) {
         // Autenticación exitosa
-        $_SESSION['user_id'] = $usuario['numero_empleado']; // Cambiado de 'id' a 'numero_empleado'
+        session_regenerate_id(true); // Regenerar el ID de sesión para evitar fijación de sesión
+        $_SESSION['user_id'] = $usuario['numero_empleado'];
         $_SESSION['user_rol'] = $usuario['rol'];
         $_SESSION['user_name'] = $usuario['nombre'];
 
-        header('Location: admin_panel.php');
+        if ($usuario['rol'] === 'admin') {
+            header('Location: admin_panel.php');
+        } else {
+            header('Location: user_panel.php');
+        }
         exit;
     } else {
         // Autenticación fallida
@@ -180,29 +185,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <header>
         <div class="header-content">
             <img src="imagenes/coppel-logo2.png" alt="BanCoppel">
-            <nav>
-                <ul>
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="bitacora_actividades.php">Bitácora de Actividades</a></li>
-                    <li><a href="reporte.php">Reportes</a></li>
-                    <li><a href="incidencias.php">Incidencias</a></li>
-                    <li><a href="login.php">Iniciar Sesión</a></li>
-                    <li><a href="registro.php">Registrarse</a></li>
-                </ul>
-            </nav>
         </div>
     </header>
     <div class="background" id="background"></div>
     <div class="container">
         <div class="form-container">
-            <h1>Iniciar Sesión</h1>
+            <h1>Iniciar Sesion</h1>
             <?php if (isset($error_message)): ?>
                 <p class="error"><?php echo $error_message; ?></p>
             <?php endif; ?>
-            <form method="post" action="login.php">
+            <form id="loginForm" method="post" action="login.php">
                 <input type="email" name="email" placeholder="Email" required>
                 <input type="password" name="password" placeholder="Contraseña" required>
-                <button type="submit">Iniciar Sesión</button>
+                <button type="submit">Iniciar Sesion</button>
             </form>
             <div class="register-link">
                 <p>¿No tienes una cuenta? <a href="registro.php">Regístrate</a></p>
@@ -225,6 +220,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 dot.remove();
             }, 5000);
         });
+
+        // Evitar el acceso a páginas protegidas mediante la navegación hacia adelante
+        document.getElementById('loginForm').onsubmit = function() {
+            if (document.querySelector('input[name="password"]').value.trim() === '') {
+                alert('Por favor, ingresa tu contraseña.');
+                return false;
+            }
+        };
     </script>
 </body>
 </html>

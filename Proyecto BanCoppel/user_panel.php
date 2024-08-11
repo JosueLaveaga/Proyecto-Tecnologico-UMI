@@ -1,8 +1,23 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
-    echo "Acceso denegado.";
-    exit;
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+require 'conexion.php';
+
+$user_id = $_SESSION['user_id'];
+
+$query = $pdo->prepare('SELECT numero_empleado, nombre, rol FROM usuarios WHERE numero_empleado = :id');
+$query->bindParam(':id', $user_id);
+$query->execute();
+
+$user = $query->fetch(PDO::FETCH_ASSOC);
+
+if ($user === false) {
+    header("Location: login.php");
+    exit();
 }
 ?>
 
@@ -11,7 +26,7 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Administrador</title>
+    <title>Panel de Usuario</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -104,7 +119,7 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             position: relative;
             z-index: 10;
         }
-        .admin-panel {
+        .user-panel {
             background-color: #fff;
             padding: 20px;
             border-radius: 5px;
@@ -113,10 +128,10 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             max-width: 800px;
             text-align: center;
         }
-        .admin-panel h1 {
+        .user-panel h1 {
             margin-bottom: 20px;
         }
-        .admin-panel a {
+        .user-panel a {
             display: inline-block;
             margin: 10px;
             padding: 10px 20px;
@@ -126,7 +141,7 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             border-radius: 5px;
             transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
         }
-        .admin-panel a:hover {
+        .user-panel a:hover {
             background-color: #0056b3;
             box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
         }
@@ -188,7 +203,7 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             <nav>
                 <div class="menu-toggle" onclick="toggleMenu()">☰</div>
                 <ul>
-                    <li><a href="logout.php">Cerrar Sesion</a></li>
+                    <li><a href="logout.php" class="logout-link">Cerrar Sesion</a></li>
                 </ul>
             </nav>
         </div>
@@ -196,22 +211,19 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             <ul>
                 <li><a href="index.php" onclick="toggleMenu()">Inicio</a></li>
                 <li><a href="bitacora_actividades.php" onclick="toggleMenu()">Bitácora de Actividades</a></li>
-                <li><a href="reporte_actividades_admin.php" onclick="toggleMenu()">Reporte de Actividades</a></li>
-                <li><a href="reporte_incidencias_admin.php" onclick="toggleMenu()">Reporte de Incidencias</a></li>
-                <li><a href="gestion_incidencias_admin.php" onclick="toggleMenu()">Gestión de Incidencias</a></li>
-                <li><a href="logout.php" onclick="toggleMenu()">Cerrar Sesión</a></li>
+                <li><a href="gestion_incidencias_user.php" onclick="toggleMenu()">Incidencias</a></li>
+                <li><a href="gestion_usuarios.php" onclick="toggleMenu()">Gestión de Usuarios</a></li>
+                <li><a href="logout.php" onclick="toggleMenu()" class="logout-link">Cerrar Sesión</a></li>
             </ul>
         </div>
     </header>
     <div class="background" id="background"></div>
     <div class="container">
-        <div class="admin-panel">
-            <h1>Bienvenido al Panel de Administrador</h1>
-            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
+        <div class="user-panel">
+            <h1>Bienvenido al Panel de Usuario</h1>
             <a href="bitacora_actividades.php">Bitácora de Actividades</a>
-            <a href="gestion_incidencias_admin.php">Gestión de Incidencias</a>
-            <a href="reporte_actividades_admin.php">Reporte de Actividades</a>
-            <a href="reporte_incidencias_admin.php">Reporte de Incidencias</a>
+            <a href="gestion_incidencias_user.php">Gestión de Incidencias</a>
+            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
         </div>
     </div>
     <footer>
@@ -222,6 +234,31 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             const mobileMenu = document.getElementById('mobileMenu');
             mobileMenu.classList.toggle('active');
         }
+
+        function checkIncidenceStatus() {
+    console.log("checkIncidenceStatus called");
+
+    fetch('verificar_incidencias.php')
+        .then(response => response.json())
+        .then(data => {
+            console.log(data); // Para ver el objeto completo que estás recibiendo del servidor
+
+            if (data.resuelta) {
+                const nombresIncidencias = data.incidencias.map(incidencia => incidencia.descripcion).join(', ');
+                alert('Tu(s) incidencia(s) ha(n) sido resuelta(s): ' + nombresIncidencias);
+            } else {
+                setTimeout(checkIncidenceStatus, 5000); // Reintentar después de 5 segundos
+            }
+        })
+        .catch(error => console.error('Error al comprobar el estado de la incidencia:', error));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    checkIncidenceStatus();
+});
+
+
+
 
         // Crear partículas animadas
         function createParticle() {

@@ -1,8 +1,8 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
+if (!isset($_SESSION['user_rol']) || ($_SESSION['user_rol'] !== 'admin' && $_SESSION['user_rol'] !== 'user')) {
     echo "Acceso denegado.";
-    exit;
+    exit();
 }
 
 include 'conexion.php';
@@ -10,15 +10,20 @@ include 'conexion.php';
 if (isset($_GET['numero_empleado'])) {
     $numero_empleado = $_GET['numero_empleado'];
 
-    // Eliminar el usuario de la base de datos
+    // Verificar que el usuario no se esté eliminando a sí mismo
+    if ($numero_empleado == $_SESSION['user_id']) {
+        echo "No puedes eliminarte a ti mismo.";
+        exit();
+    }
+
+    // Eliminar el usuario
     $stmt = $pdo->prepare("DELETE FROM usuarios WHERE numero_empleado = ?");
     $stmt->execute([$numero_empleado]);
 
-    // Redireccionar de vuelta a la página de gestión de usuarios
     header('Location: gestion_usuarios.php');
-    exit;
+    exit();
 } else {
-    echo "Número de empleado no proporcionado.";
-    exit;
+    echo "Número de empleado no especificado.";
+    exit();
 }
 ?>

@@ -1,8 +1,65 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
-    echo "Acceso denegado.";
-    exit;
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+require 'conexion.php';
+
+$user_id = $_SESSION['user_id'];
+
+$query = $pdo->prepare('SELECT numero_empleado, nombre, rol FROM usuarios WHERE numero_empleado = :id');
+$query->bindParam(':id', $user_id);
+$query->execute();
+
+$user = $query->fetch(PDO::FETCH_ASSOC);
+
+if ($user === false) {
+    header("Location: login.php");
+    exit();
+}
+
+// Establecer la zona horaria de Mazatlán, Culiacán, Sinaloa
+date_default_timezone_set('America/Mazatlan');
+
+$incidencia_registrada = false;
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $descripcion = $_POST['descripcion'];
+    $prioridad = $_POST['prioridad'];
+    $numero_empleado = $_SESSION['user_id'];
+    $fecha = date('Y-m-d H:i:s');
+    $estado = 'pendiente';
+
+    $imagen = $_FILES['imagen'];
+    $imagen_nombre = basename($imagen['name']);
+    $imagen_tipo = $imagen['type'];
+    $imagen_contenido = file_get_contents($imagen['tmp_name']);
+    $imagen_base64 = base64_encode($imagen_contenido);
+
+    // Mover el archivo a la carpeta de uploads
+    $upload_dir = 'uploads/';
+    $upload_file = $upload_dir . $imagen_nombre;
+    if (move_uploaded_file($imagen['tmp_name'], $upload_file)) {
+        try {
+            $query = $pdo->prepare('INSERT INTO incidencias (numero_empleado, descripcion, imagen_nombre, imagen_tipo, imagen_contenido, prioridad, fecha, estado) VALUES (:numero_empleado, :descripcion, :imagen_nombre, :imagen_tipo, :imagen_contenido, :prioridad, :fecha, :estado)');
+            $query->bindParam(':numero_empleado', $numero_empleado);
+            $query->bindParam(':descripcion', $descripcion);
+            $query->bindParam(':imagen_nombre', $imagen_nombre);
+            $query->bindParam(':imagen_tipo', $imagen_tipo);
+            $query->bindParam(':imagen_contenido', $imagen_base64, PDO::PARAM_LOB);
+            $query->bindParam(':prioridad', $prioridad);
+            $query->bindParam(':fecha', $fecha);
+            $query->bindParam(':estado', $estado);
+            $query->execute();
+            $incidencia_registrada = true;
+        } catch (PDOException $e) {
+            echo "<script>alert('Error al registrar la incidencia: " . $e->getMessage() . "');</script>";
+        }
+    } else {
+        echo "<script>alert('Error al cargar la imagen.');</script>";
+    }
 }
 ?>
 
@@ -11,8 +68,9 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Administrador</title>
+    <title>Reportar Incidencia</title>
     <style>
+        /* El mismo CSS que ya has estado utilizando */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -104,29 +162,41 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             position: relative;
             z-index: 10;
         }
-        .admin-panel {
+        .report-panel {
             background-color: #fff;
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px;
+            max-width: 400px;
             text-align: center;
         }
-        .admin-panel h1 {
+        .report-panel h1 {
             margin-bottom: 20px;
         }
-        .admin-panel a {
-            display: inline-block;
-            margin: 10px;
+        .report-panel form {
+            display: flex;
+            flex-direction: column;
+        }
+        .report-panel textarea,
+        .report-panel select,
+        .report-panel input[type="file"] {
+            margin-bottom: 10px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .report-panel button {
             padding: 10px 20px;
             background-color: #007bff;
             color: #fff;
             text-decoration: none;
+            border: none;
             border-radius: 5px;
             transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
         }
-        .admin-panel a:hover {
+        .report-panel button:hover {
             background-color: #0056b3;
             box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
         }
@@ -179,6 +249,36 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
                 transform: translateY(-100vh) translateX(50vw);
             }
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+        }
+        .modal-content button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -188,7 +288,7 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             <nav>
                 <div class="menu-toggle" onclick="toggleMenu()">☰</div>
                 <ul>
-                    <li><a href="logout.php">Cerrar Sesion</a></li>
+                    <li><a href="logout.php" class="logout-link">Cerrar Sesion</a></li>
                 </ul>
             </nav>
         </div>
@@ -196,27 +296,48 @@ if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
             <ul>
                 <li><a href="index.php" onclick="toggleMenu()">Inicio</a></li>
                 <li><a href="bitacora_actividades.php" onclick="toggleMenu()">Bitácora de Actividades</a></li>
-                <li><a href="reporte_actividades_admin.php" onclick="toggleMenu()">Reporte de Actividades</a></li>
-                <li><a href="reporte_incidencias_admin.php" onclick="toggleMenu()">Reporte de Incidencias</a></li>
-                <li><a href="gestion_incidencias_admin.php" onclick="toggleMenu()">Gestión de Incidencias</a></li>
-                <li><a href="logout.php" onclick="toggleMenu()">Cerrar Sesión</a></li>
+                <li><a href="reporte.php" onclick="toggleMenu()">Reportes</a></li>
+                <li><a href="gestion_incidencias_user.php" onclick="toggleMenu()">Incidencias</a></li>
+                <li><a href="logout.php" onclick="toggleMenu()" class="logout-link">Cerrar Sesión</a></li>
             </ul>
         </div>
     </header>
     <div class="background" id="background"></div>
     <div class="container">
-        <div class="admin-panel">
-            <h1>Bienvenido al Panel de Administrador</h1>
-            <a href="gestion_usuarios.php">Gestión de Usuarios</a>
-            <a href="bitacora_actividades.php">Bitácora de Actividades</a>
-            <a href="gestion_incidencias_admin.php">Gestión de Incidencias</a>
-            <a href="reporte_actividades_admin.php">Reporte de Actividades</a>
-            <a href="reporte_incidencias_admin.php">Reporte de Incidencias</a>
+        <div class="report-panel">
+            <h1>Reportar Incidencia</h1>
+            <form method="post" enctype="multipart/form-data">
+                <textarea name="descripcion" placeholder="Describe el problema..." required></textarea>
+                <select name="prioridad" required>
+                    <option value="alta">Alta</option>
+                    <option value="media">Media</option>
+                    <option value="baja">Baja</option>
+                </select>
+                <input type="file" name="imagen" accept="image/*" required>
+                <button type="submit">Enviar Incidencia</button>
+            </form>
         </div>
     </div>
     <footer>
         <p>&copy; 2024 BanCoppel Derechos Reservados</p>
     </footer>
+
+    <?php if ($incidencia_registrada): ?>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <p>Incidencia registrada exitosamente.</p>
+            <button onclick="redirectToUserPanel()">Aceptar</button>
+        </div>
+    </div>
+    <script>
+        document.getElementById('modal').style.display = 'block';
+
+        function redirectToUserPanel() {
+            window.location.href = 'user_panel.php';
+        }
+    </script>
+    <?php endif; ?>
+
     <script>
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');

@@ -1,8 +1,8 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
-    echo "Acceso denegado.";
-    exit;
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
 }
 
 include 'conexion.php';
@@ -24,11 +24,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rol = $_POST['rol'];
     $old_numero_empleado = $_POST['old_numero_empleado'];
 
-    $stmt = $pdo->prepare("UPDATE usuarios SET numero_empleado = ?, nombre = ?, email = ?, password = ?, rol = ? WHERE numero_empleado = ?");
-    $stmt->execute([$numero_empleado, $nombre, $email, $password, $rol, $old_numero_empleado]);
+    // Validaciones en el backend
+    if (!preg_match('/^\d{1,8}$/', $numero_empleado)) {
+        $error_message = "El número de empleado debe tener hasta 8 dígitos y solo puede contener números.";
+    } elseif (!preg_match('/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/', $password)) {
+        $error_message = "La contraseña debe tener al menos un carácter especial, un número, letras minúsculas y mayúsculas, y una longitud máxima de 8 caracteres.";
+    } else {
+        $stmt = $pdo->prepare("UPDATE usuarios SET numero_empleado = ?, nombre = ?, email = ?, password = ?, rol = ? WHERE numero_empleado = ?");
+        $stmt->execute([$numero_empleado, $nombre, $email, $password, $rol, $old_numero_empleado]);
 
-    header('Location: gestion_usuarios.php');
-    exit;
+        header('Location: gestion_usuarios.php');
+        exit;
+    }
 }
 ?>
 
@@ -167,6 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #0056b3;
             box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
         }
+        .error {
+            color: red;
+            margin-bottom: 10px;
+        }
         footer {
             text-align: center;
             padding: 10px;
@@ -225,12 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <nav>
                 <div class="menu-toggle" onclick="toggleMenu()">☰</div>
                 <ul>
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="bitacora_actividades.php">Bitácora de Actividades</a></li>
-                    <li><a href="reporte.php">Reportes</a></li>
-                    <li><a href="incidencias.php">Incidencias</a></li>
-                    <li><a href="login.php">Iniciar Sesión</a></li>
-                    <li><a href="registro.php">Registrarse</a></li>
+                    <li><a href="logout.php">Cerrar sesión</a></li>
                 </ul>
             </nav>
         </div>
@@ -249,12 +255,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="container">
         <div class="edit-container">
             <h1>Editar Usuario</h1>
-            <form method="post">
+            <?php if (isset($error_message)): ?>
+                <p class="error"><?php echo $error_message; ?></p>
+            <?php endif; ?>
+            <form method="post" action="editar_usuario.php" onsubmit="return validarFormulario()">
                 <input type="hidden" name="old_numero_empleado" value="<?php echo htmlspecialchars($usuario['numero_empleado']); ?>">
-                <input type="text" name="numero_empleado" value="<?php echo htmlspecialchars($usuario['numero_empleado']); ?>" placeholder="Número de Empleado" required>
+                <input type="text" id="numero_empleado" name="numero_empleado" value="<?php echo htmlspecialchars($usuario['numero_empleado']); ?>" maxlength="8" placeholder="Número de Empleado" required>
                 <input type="text" name="nombre" value="<?php echo htmlspecialchars($usuario['nombre']); ?>" placeholder="Nombre" required>
                 <input type="email" name="email" value="<?php echo htmlspecialchars($usuario['email']); ?>" placeholder="Email" required>
-                <input type="text" name="password" value="<?php echo htmlspecialchars($usuario['password']); ?>" placeholder="Contraseña" required>
+                <input type="password" id="password" name="password" value="<?php echo htmlspecialchars($usuario['password']); ?>" placeholder="Contraseña" required>
                 <select name="rol" required>
                     <option value="admin" <?php echo $usuario['rol'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
                     <option value="user" <?php echo $usuario['rol'] === 'user' ? 'selected' : ''; ?>>Usuario</option>
@@ -270,6 +279,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
             mobileMenu.classList.toggle('active');
+        }
+
+        function validarFormulario() {
+            const numero_empleado = document.getElementById('numero_empleado').value;
+            const password = document.getElementById('password').value;
+            const error_message = document.getElementById('error-message');
+
+            // Validar número de empleado
+            const numeroEmpleadoRegex = /^\d{1,8}$/;
+            if (!numeroEmpleadoRegex.test(numero_empleado)) {
+                error_message.textContent = 'El número de empleado debe tener hasta 8 dígitos y solo puede contener números.';
+                return false;
+            }
+
+            // Validar contraseña
+            const passwordRegex = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/;
+            if (!passwordRegex.test(password)) {
+                error_message.textContent = 'La contraseña debe tener al menos un carácter especial, un número, letras minúsculas y mayúsculas, y una longitud máxima de 8 caracteres.';
+                return false;
+            }
+
+            return true;
         }
 
         // Crear partículas animadas

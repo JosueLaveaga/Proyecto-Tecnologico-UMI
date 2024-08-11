@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_rol']) || $_SESSION['user_rol'] !== 'admin') {
+if (!isset($_SESSION['user_rol']) || ($_SESSION['user_rol'] !== 'admin' && $_SESSION['user_rol'] !== 'user')) {
     echo "Acceso denegado.";
     exit;
 }
@@ -61,7 +61,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             display: flex;
         }
         nav ul li {
-            margin: 0 15px;
+            margin: 0px 30%;
         }
         nav ul li a {
             color: #fff;
@@ -231,12 +231,7 @@ $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <nav>
                 <div class="menu-toggle" onclick="toggleMenu()">☰</div>
                 <ul>
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="bitacora_actividades.php">Bitácora de Actividades</a></li>
-                    <li><a href="reporte.php">Reportes</a></li>
-                    <li><a href="incidencias.php">Incidencias</a></li>
-                    <li><a href="login.php">Iniciar Sesión</a></li>
-                    <li><a href="registro.php">Registrarse</a></li>
+                    <li><a href="logout.php">Cerrar Sesion</a></li>
                 </ul>
             </nav>
         </div>

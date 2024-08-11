@@ -179,17 +179,6 @@
     <header>
         <div class="header-content">
             <img src="imagenes/coppel-logo2.png" alt="BanCoppel">
-            <nav>
-                <div class="menu-toggle" onclick="toggleMenu()">☰</div>
-                <ul>
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="bitacora_actividades.php">Bitácora de Actividades</a></li>
-                    <li><a href="reporte.php">Reportes</a></li>
-                    <li><a href="incidencias.php">Incidencias</a></li>
-                    <li><a href="login.php">Iniciar Sesión</a></li>
-                    <li><a href="registro.php">Registrarse</a></li>
-                </ul>
-            </nav>
         </div>
         <div class="mobile-menu" id="mobileMenu">
             <ul>

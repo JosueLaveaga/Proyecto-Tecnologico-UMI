@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('America/Mazatlan');
+
 $dsn = 'pgsql:host=localhost;port=5432;dbname=database';
 $user = 'postgres';
 $password = '1';

@@ -1,24 +1,26 @@
 <?php
 session_start();
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit();
+}
+
 include 'conexion.php';
 
-$data = json_decode(file_get_contents('php://input'), true);
+$data = json_decode(file_get_contents("php://input"));
 
-if (isset($data['id'])) {
-    $id = $data['id'];
-    $titulo = $data['titulo'];
-    $descripcion = $data['descripcion'];
-    $estado = $data['estado'];
-
-    $stmt = $pdo->prepare("UPDATE actividades SET titulo = ?, descripcion = ?, estado = ? WHERE id = ?");
-    $stmt->execute([$titulo, $descripcion, $estado, $id]);
-
-    if ($stmt->rowCount() > 0) {
+if (isset($data->id) && isset($data->titulo) && isset($data->descripcion) && isset($data->estado)) {
+    $stmt = $pdo->prepare("UPDATE actividades SET titulo = :titulo, descripcion = :descripcion, estado = :estado WHERE id = :id");
+    $stmt->bindParam(':id', $data->id);
+    $stmt->bindParam(':titulo', $data->titulo);
+    $stmt->bindParam(':descripcion', $data->descripcion);
+    $stmt->bindParam(':estado', $data->estado);
+    if ($stmt->execute()) {
         echo json_encode(['success' => true]);
     } else {
         echo json_encode(['success' => false]);
     }
-    exit;
+} else {
+    echo json_encode(['success' => false]);
 }
-echo json_encode(['success' => false]);
 ?>
